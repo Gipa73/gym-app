@@ -82,7 +82,8 @@
             <label for="fileInput" class="w-full max-w-sm border-2 border-dashed border-gym-gold border-opacity-50 rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer hover:bg-gym-card transition duration-300 shadow-gold group mb-6">
                 <i class="fas fa-cloud-upload-alt text-4xl text-gym-gold mb-3 group-hover:scale-110 transition"></i>
                 <span class="text-gym-goldLight font-medium">Tocca per caricare (.txt, .pdf)</span>
-                <input type="file" id="fileInput" accept=".txt,.csv,.pdf" class="hidden">
+                <!-- sr-only instead of hidden to prevent iOS Safari bug -->
+                <input type="file" id="fileInput" accept=".txt,.csv,.pdf,application/pdf,text/plain" class="sr-only">
             </label>
 
             <button id="demoBtn" class="px-6 py-3 bg-gym-card border border-gray-700 text-gym-gold rounded-full font-bold hover:border-gym-gold transition duration-300 mb-4">
@@ -98,7 +99,7 @@
 
         <div id="loadingOverlay" class="absolute inset-0 bg-gym-dark z-20 hidden flex-col items-center justify-center fade-in">
             <i class="fas fa-circle-notch fa-spin text-5xl text-gym-gold mb-4"></i>
-            <h3 class="text-xl text-white font-bold mb-2">Sto organizzando la scheda...</h3>
+            <h3 class="text-xl text-white font-bold mb-2">Lettura in corso...</h3>
             <p class="text-gray-400 text-sm">Un istante</p>
         </div>
 
@@ -231,7 +232,7 @@
         function showMessage(msg, isError = false) {
             messageArea.textContent = msg;
             messageArea.className = `mt-6 text-sm font-bold transition-opacity duration-300 opacity-100 px-4 ${isError ? 'text-red-500' : 'text-green-400'}`;
-            setTimeout(() => messageArea.classList.replace('opacity-100', 'opacity-0'), 6000);
+            setTimeout(() => messageArea.classList.replace('opacity-100', 'opacity-0'), 8000);
         }
 
         function saveSectionsToStorage(data) { try { localStorage.setItem(STORAGE_KEYS.sections, JSON.stringify(data)); } catch (e) {} }
@@ -285,7 +286,7 @@
                 if (validSections.length > 0) {
                     setsProgress = {}; saveProgress(); renderSections(validSections); saveSectionsToStorage(validSections);
                     loadSavedBtn.classList.remove('hidden'); showMessage("Scheda generata con successo!");
-                } else { throw new Error("Non ho trovato esercizi. Inserisci testi tipo: Giorno 1, Settimana 1, Panca 4x10 rec 90s"); }
+                } else { throw new Error("Non ho trovato esercizi. Assicurati che ci siano intestazioni come 'Giorno 1'."); }
             } catch (err) {
                 console.error(err); showMessage(err.message, true);
             } finally {
@@ -383,62 +384,78 @@
         closeSidebarBtn.onclick = () => { sidebarOverlay.classList.add('hidden'); sidebar.classList.add('-translate-x-full'); };
         sidebarOverlay.onclick = closeSidebarBtn.onclick;
 
-        // Reset del valore al click invece che al termine della lettura
-        fileInput.addEventListener('click', function() {
-            this.value = null; 
-        });
-
+        // Gestore del cambio file (completamente riscritto per compatibilita mobile)
         fileInput.addEventListener('change', async function (e) {
             const file = e.target.files[0];
             if (!file) return;
-            const fileExtension = file.name.split('.').pop().toLowerCase();
             
+            const fileName = file.name.toLowerCase();
+            const isPDF = fileName.endsWith('.pdf') || file.type === 'application/pdf';
+            const isText = fileName.endsWith('.txt') || fileName.endsWith('.csv') || file.type.includes('text');
+
             loadingOverlay.classList.remove('hidden'); 
             loadingOverlay.classList.add('flex');
             const loadingText = document.querySelector('#loadingOverlay h3');
-            loadingText.textContent = "Estrazione testo dal file...";
+            loadingText.textContent = "Estrazione in corso...";
 
-            if (fileExtension === 'txt' || fileExtension === 'csv') {
+            if (isText) {
                 const reader = new FileReader();
                 reader.onload = e => { 
                     loadingText.textContent = "Sto organizzando la scheda..."; 
                     processTextWithAI(e.target.result); 
+                    fileInput.value = ''; 
                 };
                 reader.onerror = () => { 
                     loadingOverlay.classList.add('hidden'); loadingOverlay.classList.remove('flex'); 
-                    showMessage("Errore nella lettura del file di testo.", true); 
+                    showMessage("Errore lettura file.", true); 
+                    fileInput.value = ''; 
                 };
                 reader.readAsText(file);
-            } else if (fileExtension === 'pdf') {
+            } else if (isPDF) {
                 const fileReader = new FileReader();
                 fileReader.onload = async function () {
                     try {
+                        loadingText.textContent = "Elaborazione PDF...";
                         const typedarray = new Uint8Array(this.result);
-                        const pdfDocument = await pdfjsLib.getDocument({ data: typedarray }).promise;
+                        
+                        // Metodo ultra robusto per PDF.js
+                        const loadingTask = pdfjsLib.getDocument({data: typedarray});
+                        const pdfDocument = await loadingTask.promise;
+                        
                         let fullText = '';
                         for (let pageNum = 1; pageNum <= pdfDocument.numPages; pageNum++) {
+                            loadingText.textContent = `Lettura pagina ${pageNum} di ${pdfDocument.numPages}...`;
                             const page = await pdfDocument.getPage(pageNum);
                             const textContent = await page.getTextContent();
                             fullText += textContent.items.map(item => item.str).join(' ') + '
 ';
                         }
-                        if (fullText.trim() === '') throw new Error("Il PDF sembra vuoto o è un'immagine scannerizzata senza testo.");
-                        loadingText.textContent = "Sto organizzando la scheda...";
+                        
+                        if (fullText.trim() === '') {
+                            throw new Error("Il PDF non contiene testo selezionabile (forse è un'immagine?).");
+                        }
+                        
+                        loadingText.textContent = "Organizzo la scheda...";
                         processTextWithAI(fullText);
+                        
                     } catch (error) {
-                        console.error("Errore lettura PDF:", error);
+                        console.error("Errore PDF:", error);
                         loadingOverlay.classList.add('hidden'); loadingOverlay.classList.remove('flex');
-                        showMessage(error.message || "Impossibile leggere questo PDF.", true);
+                        showMessage("Errore PDF: " + (error.message || error.toString()), true);
+                    } finally {
+                        fileInput.value = ''; // Reset sicuro alla fine
                     }
                 };
                 fileReader.onerror = () => { 
                     loadingOverlay.classList.add('hidden'); loadingOverlay.classList.remove('flex'); 
-                    showMessage("Accesso al file PDF negato dal sistema.", true); 
+                    showMessage("Accesso negato al file PDF.", true); 
+                    fileInput.value = ''; 
                 };
                 fileReader.readAsArrayBuffer(file);
             } else {
                 loadingOverlay.classList.add('hidden'); loadingOverlay.classList.remove('flex');
-                showMessage("Formato non supportato (.txt o .pdf)", true);
+                showMessage("Usa solo file .txt o .pdf", true);
+                fileInput.value = '';
             }
         });
 

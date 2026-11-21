@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gymapp-gp-v2';
+const CACHE_NAME = 'gymapp-gp-v3';
 const urlsToCache = [
   './',
   './index.html',
