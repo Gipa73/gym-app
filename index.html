@@ -285,7 +285,7 @@
                 if (validSections.length > 0) {
                     setsProgress = {}; saveProgress(); renderSections(validSections); saveSectionsToStorage(validSections);
                     loadSavedBtn.classList.remove('hidden'); showMessage("Scheda generata con successo!");
-                } else { throw new Error("Non ho trovato esercizi riconoscibili nel testo."); }
+                } else { throw new Error("Non ho trovato esercizi. Inserisci testi tipo: Giorno 1, Settimana 1, Panca 4x10 rec 90s"); }
             } catch (err) {
                 console.error(err); showMessage(err.message, true);
             } finally {
@@ -383,18 +383,31 @@
         closeSidebarBtn.onclick = () => { sidebarOverlay.classList.add('hidden'); sidebar.classList.add('-translate-x-full'); };
         sidebarOverlay.onclick = closeSidebarBtn.onclick;
 
+        // Reset del valore al click invece che al termine della lettura
+        fileInput.addEventListener('click', function() {
+            this.value = null; 
+        });
+
         fileInput.addEventListener('change', async function (e) {
             const file = e.target.files[0];
             if (!file) return;
             const fileExtension = file.name.split('.').pop().toLowerCase();
-            loadingOverlay.classList.remove('hidden'); loadingOverlay.classList.add('flex');
+            
+            loadingOverlay.classList.remove('hidden'); 
+            loadingOverlay.classList.add('flex');
             const loadingText = document.querySelector('#loadingOverlay h3');
             loadingText.textContent = "Estrazione testo dal file...";
 
             if (fileExtension === 'txt' || fileExtension === 'csv') {
                 const reader = new FileReader();
-                reader.onload = e => { loadingText.textContent = "Sto organizzando la scheda..."; processTextWithAI(e.target.result); };
-                reader.onerror = () => { loadingOverlay.classList.add('hidden'); loadingOverlay.classList.remove('flex'); showMessage("Errore nella lettura del file di testo.", true); };
+                reader.onload = e => { 
+                    loadingText.textContent = "Sto organizzando la scheda..."; 
+                    processTextWithAI(e.target.result); 
+                };
+                reader.onerror = () => { 
+                    loadingOverlay.classList.add('hidden'); loadingOverlay.classList.remove('flex'); 
+                    showMessage("Errore nella lettura del file di testo.", true); 
+                };
                 reader.readAsText(file);
             } else if (fileExtension === 'pdf') {
                 const fileReader = new FileReader();
@@ -418,13 +431,15 @@
                         showMessage(error.message || "Impossibile leggere questo PDF.", true);
                     }
                 };
-                fileReader.onerror = () => { loadingOverlay.classList.add('hidden'); loadingOverlay.classList.remove('flex'); showMessage("Accesso al file PDF negato.", true); };
+                fileReader.onerror = () => { 
+                    loadingOverlay.classList.add('hidden'); loadingOverlay.classList.remove('flex'); 
+                    showMessage("Accesso al file PDF negato dal sistema.", true); 
+                };
                 fileReader.readAsArrayBuffer(file);
             } else {
                 loadingOverlay.classList.add('hidden'); loadingOverlay.classList.remove('flex');
                 showMessage("Formato non supportato (.txt o .pdf)", true);
             }
-            fileInput.value = '';
         });
 
         demoBtn.onclick = () => {
