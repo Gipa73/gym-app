@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GymApp di Gianpaolo Papa</title>
+
+    <!-- Tag PWA per iOS e Android -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0a0a0a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="GymApp GP">
+    <link rel="apple-touch-icon" href="icon-192.png">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400;600;800&family=Playfair+Display:ital,wght@1,700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'gym-dark': '#0a0a0a',
+                        'gym-card': '#1a1a1a',
+                        'gym-gold': '#D4AF37',
+                        'gym-goldLight': '#F3E5AB'
+                    },
+                    fontFamily: {
+                        sans: ['Urbanist', 'sans-serif'],
+                        serif: ['Playfair Display', 'serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { font-family: 'Urbanist', sans-serif; background-color: #0a0a0a; color: #ffffff; -webkit-tap-highlight-color: transparent; }
+        .shadow-gold { box-shadow: 0 4px 15px rgba(212, 175, 55, 0.25); }
+        .glow-text { text-shadow: 0 0 10px rgba(212, 175, 55, 0.5); }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .fade-in { animation: fadeIn 0.5s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid #D4AF37; outline-offset: 2px; }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden bg-gym-dark">
+
+    <header class="p-5 flex justify-between items-center border-b border-gray-800 bg-gym-dark z-10 shadow-md">
+        <div class="flex items-center gap-3">
+            <button id="menuBtn" class="hidden text-gym-gold hover:text-white transition p-2" aria-label="Apri menu schede">
+                <i class="fas fa-bars text-xl"></i>
+            </button>
+            <h1 class="text-2xl font-serif font-bold text-white tracking-wider glow-text">GYM<span class="text-gym-gold">AI</span></h1>
+        </div>
+        <div class="flex gap-4">
+            <button id="resetBtn" class="hidden text-gray-400 hover:text-white transition p-2" aria-label="Nuova scheda">
+                <i class="fas fa-sign-out-alt text-xl"></i>
+            </button>
+        </div>
+    </header>
+
+    <div id="sidebarOverlay" class="fixed inset-0 bg-black bg-opacity-70 z-40 hidden transition-opacity"></div>
+    <div id="sidebar" class="fixed inset-y-0 left-0 w-64 bg-gym-card border-r border-gym-gold border-opacity-30 z-50 transform -translate-x-full transition-transform duration-300 flex flex-col shadow-gold">
+        <div class="p-5 border-b border-gray-800 flex justify-between items-center bg-gym-dark">
+            <h2 class="text-xl font-serif text-gym-gold">Le Tue Schede</h2>
+            <button id="closeSidebarBtn" class="text-gray-400 hover:text-white transition p-2" aria-label="Chiudi menu"><i class="fas fa-times text-xl"></i></button>
+        </div>
+        <div id="sectionsList" class="flex-1 overflow-y-auto p-4 space-y-3"></div>
+    </div>
+
+    <main class="flex-1 overflow-y-auto relative">
+        <div id="uploadContainer" class="absolute inset-0 flex flex-col items-center justify-center p-6 fade-in overflow-y-auto">
+            <i class="fas fa-dumbbell text-6xl text-gym-gold opacity-50 mb-6"></i>
+            <h2 class="text-3xl font-serif mb-2 text-center">Crea la tua scheda</h2>
+            <p class="text-gray-400 text-center mb-10 max-w-sm">Carica appunti o un PDF: il testo verrà organizzato automaticamente in una scheda divisa per settimane, giorni ed esercizi.</p>
+
+            <label for="fileInput" class="w-full max-w-sm border-2 border-dashed border-gym-gold border-opacity-50 rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer hover:bg-gym-card transition duration-300 shadow-gold group mb-6">
+                <i class="fas fa-cloud-upload-alt text-4xl text-gym-gold mb-3 group-hover:scale-110 transition"></i>
+                <span class="text-gym-goldLight font-medium">Tocca per caricare (.txt, .pdf)</span>
+                <input type="file" id="fileInput" accept=".txt,.csv,.pdf" class="hidden">
+            </label>
+
+            <button id="demoBtn" class="px-6 py-3 bg-gym-card border border-gray-700 text-gym-gold rounded-full font-bold hover:border-gym-gold transition duration-300 mb-4">
+                Testa con testo incasinato
+            </button>
+
+            <button id="loadSavedBtn" class="hidden px-6 py-3 bg-gym-gold bg-opacity-10 border border-gym-gold text-gym-gold rounded-full font-bold hover:bg-gym-gold hover:text-black transition duration-300">
+                <i class="fas fa-clock-rotate-left mr-2"></i>Riprendi ultima scheda
+            </button>
+
+            <p id="messageArea" class="mt-6 text-sm font-bold opacity-0 transition-opacity duration-300 text-center px-4" role="status" aria-live="polite"></p>
+        </div>
+
+        <div id="loadingOverlay" class="absolute inset-0 bg-gym-dark z-20 hidden flex-col items-center justify-center fade-in">
+            <i class="fas fa-circle-notch fa-spin text-5xl text-gym-gold mb-4"></i>
+            <h3 class="text-xl text-white font-bold mb-2">Sto organizzando la scheda...</h3>
+            <p class="text-gray-400 text-sm">Un istante</p>
+        </div>
+
+        <div id="appContainer" class="hidden flex-col p-4 w-full max-w-2xl mx-auto pb-24 fade-in">
+            <div id="tabsContainer" class="flex overflow-x-auto space-x-3 mb-6 pb-2 hide-scrollbar w-full sticky top-0 bg-gym-dark z-10 pt-2"></div>
+            <div class="flex justify-between items-end mb-6">
+                <div>
+                    <h2 id="routineTitle" class="text-3xl font-serif text-gym-gold">Il Tuo Workout</h2>
+                    <p id="routineSubtitle" class="text-gray-400 text-sm mt-1"></p>
+                </div>
+            </div>
+            <div id="routineContainer" class="space-y-4"></div>
+        </div>
+    </main>
+
+    <div id="restTimerBar" class="hidden fixed bottom-0 inset-x-0 z-40 bg-gym-card border-t border-gym-gold border-opacity-40 shadow-gold fade-in">
+        <div class="h-1 bg-gray-800">
+            <div id="restTimerProgress" class="h-full bg-gym-gold transition-all duration-1000 ease-linear" style="width:100%"></div>
+        </div>
+        <div class="max-w-2xl mx-auto px-5 py-3 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <i class="fas fa-stopwatch text-gym-gold text-xl"></i>
+                <div>
+                    <p class="text-xs text-gray-400 leading-none mb-1">Recupero &middot; <span id="restTimerExName">Esercizio</span></p>
+                    <p id="restTimerDisplay" class="text-2xl font-bold text-white leading-none">00:00</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="restTimerAdd15" class="px-3 py-2 rounded-lg border border-gray-700 text-gray-300 text-sm font-bold hover:border-gym-gold hover:text-gym-gold transition">+15s</button>
+                <button id="restTimerSkip" class="px-3 py-2 rounded-lg bg-gym-gold text-black text-sm font-bold hover:shadow-gold transition">Salta</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="videoModal" class="fixed inset-0 bg-black bg-opacity-95 z-50 hidden flex-col justify-center items-center p-4">
+        <button id="closeVideoBtn" class="absolute top-6 right-6 text-white text-3xl hover:text-gym-gold transition p-2" aria-label="Chiudi video">
+            <i class="fas fa-times"></i>
+        </button>
+        <div class="w-full max-w-3xl aspect-video bg-gray-900 rounded-xl overflow-hidden shadow-gold border border-gym-gold border-opacity-30">
+            <iframe id="videoFrame" class="w-full h-full" src="" frameborder="0" allow="accelerometer; autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+        </div>
+    </div>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW setup failed: ', err));
+            });
+        }
+
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+        const STORAGE_KEYS = { sections: 'gym_sections_data', progress: 'gym_sets_progress' };
+        let currentSectionIndex = 0, currentDayIndex = 0, sectionsData = [], setsProgress = {};
+
+        const fileInput = document.getElementById('fileInput'), uploadContainer = document.getElementById('uploadContainer'), appContainer = document.getElementById('appContainer'), tabsContainer = document.getElementById('tabsContainer'), routineContainer = document.getElementById('routineContainer'), routineTitle = document.getElementById('routineTitle'), demoBtn = document.getElementById('demoBtn'), resetBtn = document.getElementById('resetBtn'), messageArea = document.getElementById('messageArea'), loadingOverlay = document.getElementById('loadingOverlay'), videoModal = document.getElementById('videoModal'), videoFrame = document.getElementById('videoFrame'), closeVideoBtn = document.getElementById('closeVideoBtn'), menuBtn = document.getElementById('menuBtn'), sidebar = document.getElementById('sidebar'), sidebarOverlay = document.getElementById('sidebarOverlay'), closeSidebarBtn = document.getElementById('closeSidebarBtn'), sectionsList = document.getElementById('sectionsList'), routineSubtitle = document.getElementById('routineSubtitle'), loadSavedBtn = document.getElementById('loadSavedBtn'), restTimerBar = document.getElementById('restTimerBar'), restTimerDisplay = document.getElementById('restTimerDisplay'), restTimerExName = document.getElementById('restTimerExName'), restTimerProgress = document.getElementById('restTimerProgress'), restTimerSkip = document.getElementById('restTimerSkip'), restTimerAdd15 = document.getElementById('restTimerAdd15');
+
+        function escapeHtml(str) {
+            if (str === undefined || str === null) return '';
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+        }
+
+        let restTimerInterval = null, restTimerRemaining = 0, restTimerTotal = 0;
+
+        function parseRestToSeconds(str) {
+            if (!str) return 0;
+            const s = String(str).toLowerCase().trim();
+            const mmss = s.match(/^(\d+):(\d{1,2})$/);
+            if (mmss) return parseInt(mmss[1]) * 60 + parseInt(mmss[2]);
+            let total = 0, found = false;
+            const minMatch = s.match(/(\d+(?:[.,]\d+)?)\s*(min|minuti|m(?!s))/);
+            if (minMatch) { total += parseFloat(minMatch[1].replace(',', '.')) * 60; found = true; }
+            const secMatch = s.match(/(\d+(?:[.,]\d+)?)\s*(sec|secondi|s)/);
+            if (secMatch) { total += parseFloat(secMatch[1].replace(',', '.')); found = true; }
+            if (!found) { const numMatch = s.match(/(\d+(?:[.,]\d+)?)/); if (numMatch) total = parseFloat(numMatch[1].replace(',', '.')); }
+            return Math.round(total) || 0;
+        }
+
+        function formatTime(totalSeconds) {
+            const m = Math.floor(totalSeconds / 60), s = totalSeconds % 60;
+            return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        }
+
+        function playBeep() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator(), gain = ctx.createGain();
+                osc.type = 'sine'; osc.frequency.value = 880;
+                gain.gain.setValueAtTime(0.15, ctx.currentTime);
+                osc.connect(gain); gain.connect(ctx.destination);
+                osc.start(); osc.stop(ctx.currentTime + 0.35);
+                osc.onended = () => ctx.close();
+            } catch (e) {}
+            if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+        }
+
+        function stopRestTimer() {
+            if (restTimerInterval) clearInterval(restTimerInterval);
+            restTimerInterval = null; restTimerBar.classList.add('hidden');
+        }
+
+        function tickRestTimer() {
+            restTimerRemaining--;
+            if (restTimerRemaining <= 0) {
+                restTimerDisplay.textContent = '00:00'; restTimerProgress.style.width = '0%';
+                playBeep(); stopRestTimer(); return;
+            }
+            restTimerDisplay.textContent = formatTime(restTimerRemaining);
+            restTimerProgress.style.width = `${Math.max(0, (restTimerRemaining / restTimerTotal) * 100)}%`;
+        }
+
+        function startRestTimer(seconds, exerciseName) {
+            if (!seconds || seconds <= 0) return;
+            if (restTimerInterval) clearInterval(restTimerInterval);
+            restTimerRemaining = seconds; restTimerTotal = seconds;
+            restTimerExName.textContent = exerciseName || 'Esercizio';
+            restTimerDisplay.textContent = formatTime(seconds);
+            restTimerProgress.style.width = '100%';
+            restTimerBar.classList.remove('hidden');
+            restTimerInterval = setInterval(tickRestTimer, 1000);
+        }
+
+        restTimerSkip.onclick = stopRestTimer;
+        restTimerAdd15.onclick = () => {
+            if (!restTimerInterval) return;
+            restTimerRemaining += 15; restTimerTotal += 15;
+            restTimerDisplay.textContent = formatTime(restTimerRemaining);
+        };
+
+        function showMessage(msg, isError = false) {
+            messageArea.textContent = msg;
+            messageArea.className = `mt-6 text-sm font-bold transition-opacity duration-300 opacity-100 px-4 ${isError ? 'text-red-500' : 'text-green-400'}`;
+            setTimeout(() => messageArea.classList.replace('opacity-100', 'opacity-0'), 6000);
+        }
+
+        function saveSectionsToStorage(data) { try { localStorage.setItem(STORAGE_KEYS.sections, JSON.stringify(data)); } catch (e) {} }
+        function loadSectionsFromStorage() { try { const raw = localStorage.getItem(STORAGE_KEYS.sections); return raw ? JSON.parse(raw) : null; } catch (e) { return null; } }
+        function saveProgress() { try { localStorage.setItem(STORAGE_KEYS.progress, JSON.stringify(setsProgress)); } catch (e) {} }
+        function loadProgress() { try { const raw = localStorage.getItem(STORAGE_KEYS.progress); return raw ? JSON.parse(raw) : {}; } catch (e) { return {}; } }
+
+        if (loadSectionsFromStorage()) loadSavedBtn.classList.remove('hidden');
+        loadSavedBtn.onclick = () => {
+            const saved = loadSectionsFromStorage();
+            if (saved && saved.length) {
+                setsProgress = loadProgress(); renderSections(saved); showMessage("Scheda ripristinata.");
+            } else { showMessage("Nessuna scheda salvata trovata.", true); }
+        };
+
+        const SECTION_HEADER_REGEX = /^(settimana|week|mese|month|fase|blocco|microciclo)/i;
+        const DAY_HEADER_REGEX = /^(giorno|day|allenamento)/i;
+
+        function parseExerciseLine(rawLine) {
+            let line = rawLine.trim(), notes = '', rest = '', sets = '', reps = '';
+            const notesMatch = line.match(/\(([^)]+)\)\s*$/);
+            if (notesMatch) { notes = notesMatch[1].trim(); line = line.slice(0, notesMatch.index).trim(); }
+            const restMatch = line.match(/(rec\.?|recupero|pausa|riposo)\s*[:\-]?\s*([\d:.,]+\s*(?:min(?:uti)?|m|sec(?:ondi)?|s)?)/i);
+            if (restMatch) { rest = restMatch[2].trim(); line = (line.slice(0, restMatch.index) + line.slice(restMatch.index + restMatch[0].length)).trim(); }
+            const setsRepsMatch = line.match(/(\d+)\s*(?:serie)?\s*[x×]\s*(\d+)/i);
+            if (setsRepsMatch) { sets = setsRepsMatch[1]; reps = setsRepsMatch[2]; line = (line.slice(0, setsRepsMatch.index) + line.slice(setsRepsMatch.index + setsRepsMatch[0].length)).trim(); }
+            let name = line.replace(/^[:\-–]+/, '').replace(/[:\-–]+$/, '').trim() || 'Esercizio';
+            return { name, sets: sets || '3', reps: reps || '', rest: rest || '', notes, videoId: '' };
+        }
+
+        function parseWorkoutTextLocally(rawText) {
+            const lines = rawText.split('
+').map(l => l.trim()).filter(l => l.length > 0);
+            const sections = [];
+            let currentSection = null, currentDay = null;
+            function ensureSection(name) { currentSection = { sectionName: name, days: [] }; sections.push(currentSection); currentDay = null; }
+            function ensureDay(name) { if (!currentSection) ensureSection('Scheda Unica'); currentDay = { name, exercises: [] }; currentSection.days.push(currentDay); }
+            lines.forEach(line => {
+                if (SECTION_HEADER_REGEX.test(line)) ensureSection(line);
+                else if (DAY_HEADER_REGEX.test(line)) ensureDay(line);
+                else { if (!currentDay) ensureDay('Giorno 1'); currentDay.exercises.push(parseExerciseLine(line)); }
+            });
+            return normalizeSections(sections);
+        }
+
+        function processTextWithAI(rawText) {
+            if (!rawText || !rawText.trim()) { showMessage("Il file sembra vuoto.", true); return; }
+            loadingOverlay.classList.remove('hidden'); loadingOverlay.classList.add('flex');
+            try {
+                const validSections = parseWorkoutTextLocally(rawText);
+                if (validSections.length > 0) {
+                    setsProgress = {}; saveProgress(); renderSections(validSections); saveSectionsToStorage(validSections);
+                    loadSavedBtn.classList.remove('hidden'); showMessage("Scheda generata con successo!");
+                } else { throw new Error("Non ho trovato esercizi riconoscibili nel testo."); }
+            } catch (err) {
+                console.error(err); showMessage(err.message, true);
+            } finally {
+                loadingOverlay.classList.add('hidden'); loadingOverlay.classList.remove('flex');
+            }
+        }
+
+        function normalizeSections(rawSections) {
+            if (!Array.isArray(rawSections)) return [];
+            return rawSections.filter(s => s && Array.isArray(s.days) && s.days.length > 0)
+                .map(s => ({ sectionName: s.sectionName || 'Scheda', days: s.days.filter(d => d && Array.isArray(d.exercises)).map(d => ({ name: d.name || 'Giorno', exercises: d.exercises.map(ex => ({ name: ex?.name || 'Esercizio', sets: ex?.sets || '3', reps: ex?.reps || '', rest: ex?.rest || '', notes: ex?.notes || '', videoId: ex?.videoId || '' })) })) }))
+                .filter(s => s.days.length > 0);
+        }
+
+        function renderSections(data) {
+            sectionsData = data;
+            uploadContainer.classList.add('hidden'); appContainer.classList.remove('hidden'); appContainer.classList.add('flex');
+            resetBtn.classList.remove('hidden'); menuBtn.classList.remove('hidden');
+            sectionsList.innerHTML = '';
+            sectionsData.forEach((section, index) => {
+                const btn = document.createElement('button');
+                const isActive = index === 0;
+                btn.className = `w-full text-left px-4 py-3 rounded-xl border transition-all duration-300 font-bold ${isActive ? 'bg-gym-gold bg-opacity-10 border-gym-gold text-gym-gold shadow-gold' : 'bg-transparent border-gray-800 text-gray-400 hover:border-gray-500'}`;
+                btn.innerHTML = `<i class="fas fa-folder-open mr-2"></i> ${escapeHtml(section.sectionName)}`;
+                btn.onclick = () => {
+                    Array.from(sectionsList.children).forEach(b => b.className = 'w-full text-left px-4 py-3 rounded-xl border transition-all duration-300 font-bold bg-transparent border-gray-800 text-gray-400 hover:border-gray-500');
+                    btn.className = 'w-full text-left px-4 py-3 rounded-xl border transition-all duration-300 font-bold bg-gym-gold bg-opacity-10 border-gym-gold text-gym-gold shadow-gold';
+                    currentSectionIndex = index; renderDays(section.days, section.sectionName, index);
+                    sidebarOverlay.classList.add('hidden'); sidebar.classList.add('-translate-x-full');
+                };
+                sectionsList.appendChild(btn);
+            });
+            if (sectionsData.length > 0) { currentSectionIndex = 0; renderDays(sectionsData[0].days, sectionsData[0].sectionName, 0); }
+        }
+
+        function renderDays(daysData, sectionName, sectionIndex) {
+            tabsContainer.innerHTML = ''; routineContainer.innerHTML = '';
+            routineSubtitle.innerHTML = `<i class="fas fa-layer-group text-gym-gold mr-1"></i> Sezione: <span class="text-white">${escapeHtml(sectionName)}</span>`;
+            if (daysData.length <= 1) tabsContainer.classList.add('hidden'); else tabsContainer.classList.remove('hidden');
+            daysData.forEach((day, dayIndex) => {
+                const isActive = dayIndex === 0;
+                const tab = document.createElement('button');
+                tab.className = `whitespace-nowrap px-5 py-2 rounded-full font-bold text-sm transition-all duration-300 border border-gym-gold ${isActive ? 'bg-gym-gold text-black shadow-gold scale-105 border-opacity-100' : 'bg-gym-card text-gym-goldLight border-opacity-30 hover:bg-gray-800'}`;
+                tab.textContent = day.name;
+                const dayContainer = document.createElement('div');
+                dayContainer.className = `w-full flex-col gap-4 fade-in ${isActive ? 'flex' : 'hidden'}`;
+                tab.onclick = () => {
+                    Array.from(tabsContainer.children).forEach(b => b.className = 'whitespace-nowrap px-5 py-2 rounded-full font-bold text-sm transition-all duration-300 border border-gym-gold border-opacity-30 bg-gym-card text-gym-goldLight hover:bg-gray-800');
+                    tab.className = 'whitespace-nowrap px-5 py-2 rounded-full font-bold text-sm transition-all duration-300 border border-gym-gold border-opacity-100 bg-gym-gold text-black shadow-gold scale-105';
+                    Array.from(routineContainer.children).forEach(c => { c.classList.remove('flex'); c.classList.add('hidden'); });
+                    dayContainer.classList.remove('hidden'); dayContainer.classList.add('flex');
+                    routineTitle.textContent = day.name; currentDayIndex = dayIndex;
+                };
+                tabsContainer.appendChild(tab);
+                day.exercises.forEach((ex, exIndex) => {
+                    const card = document.createElement('div');
+                    card.className = 'bg-gym-card rounded-2xl p-5 border border-gray-800 shadow-lg';
+                    let headerHtml = `<div class="flex justify-between items-start mb-4"><div><h3 class="text-lg font-bold text-white leading-tight">${escapeHtml(ex.name)}</h3><p class="text-sm text-gray-400 mt-2"><i class="fas fa-redo text-gym-gold mr-1"></i> ${escapeHtml(ex.reps)} reps <span class="mx-2">|</span> <i class="fas fa-hourglass-half text-gym-gold mr-1"></i> ${escapeHtml(ex.rest)}</p>${ex.notes ? `<p class="text-xs text-gym-goldLight italic mt-2 opacity-80"><i class="fas fa-info-circle mr-1"></i> ${escapeHtml(ex.notes)}</p>` : ''}</div>`;
+                    if (ex.videoId && ex.videoId.trim() !== '') { headerHtml += `<button type="button" class="video-btn w-10 h-10 rounded-full bg-gym-gold bg-opacity-10 flex-shrink-0 flex items-center justify-center text-gym-gold border border-gym-gold border-opacity-30 hover:bg-gym-gold hover:text-black transition duration-300 shadow-gold" aria-label="Guarda video esecuzione"><i class="fas fa-play ml-1"></i></button>`; }
+                    headerHtml += `</div>`; card.innerHTML = headerHtml;
+                    const videoBtn = card.querySelector('.video-btn');
+                    if (videoBtn) videoBtn.addEventListener('click', () => openVideo(ex.videoId));
+                    const setsContainer = document.createElement('div');
+                    setsContainer.className = 'flex flex-wrap gap-3 mt-4 pt-4 border-t border-gray-800';
+                    const numSets = Math.min(Math.max(parseInt(ex.sets) || 3, 1), 20);
+                    for (let i = 0; i < numSets; i++) {
+                        const progressKey = `${sectionIndex}-${dayIndex}-${exIndex}-${i}`;
+                        const isDone = !!setsProgress[progressKey];
+                        const setBtn = document.createElement('button');
+                        setBtn.type = 'button'; setBtn.setAttribute('aria-pressed', isDone ? 'true' : 'false');
+                        applySetStyle(setBtn, isDone, i);
+                        setBtn.onclick = function () {
+                            const nowDone = !setsProgress[progressKey];
+                            setsProgress[progressKey] = nowDone;
+                            if (!nowDone) delete setsProgress[progressKey];
+                            applySetStyle(this, nowDone, i);
+                            this.setAttribute('aria-pressed', nowDone ? 'true' : 'false'); saveProgress();
+                            if (nowDone && i < numSets - 1) { const restSeconds = parseRestToSeconds(ex.rest); startRestTimer(restSeconds, ex.name); }
+                        };
+                        setsContainer.appendChild(setBtn);
+                    }
+                    card.appendChild(setsContainer); dayContainer.appendChild(card);
+                });
+                routineContainer.appendChild(dayContainer);
+            });
+            if (daysData.length > 0) routineTitle.textContent = daysData[0].name;
+        }
+
+        function applySetStyle(btn, isDone, setNumber) {
+            btn.className = `w-10 h-10 rounded-full border-2 flex items-center justify-center font-bold transition duration-300 ${isDone ? 'bg-gym-gold border-gym-gold text-black shadow-gold' : 'bg-gym-dark border-gray-600 text-gray-400 hover:border-gym-gold'}`;
+            btn.innerHTML = isDone ? '<i class="fas fa-check"></i>' : String(setNumber + 1);
+        }
+
+        menuBtn.onclick = () => { sidebarOverlay.classList.remove('hidden'); sidebar.classList.remove('-translate-x-full'); };
+        closeSidebarBtn.onclick = () => { sidebarOverlay.classList.add('hidden'); sidebar.classList.add('-translate-x-full'); };
+        sidebarOverlay.onclick = closeSidebarBtn.onclick;
+
+        fileInput.addEventListener('change', async function (e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const fileExtension = file.name.split('.').pop().toLowerCase();
+            loadingOverlay.classList.remove('hidden'); loadingOverlay.classList.add('flex');
+            const loadingText = document.querySelector('#loadingOverlay h3');
+            loadingText.textContent = "Estrazione testo dal file...";
+
+            if (fileExtension === 'txt' || fileExtension === 'csv') {
+                const reader = new FileReader();
+                reader.onload = e => { loadingText.textContent = "Sto organizzando la scheda..."; processTextWithAI(e.target.result); };
+                reader.onerror = () => { loadingOverlay.classList.add('hidden'); loadingOverlay.classList.remove('flex'); showMessage("Errore nella lettura del file di testo.", true); };
+                reader.readAsText(file);
+            } else if (fileExtension === 'pdf') {
+                const fileReader = new FileReader();
+                fileReader.onload = async function () {
+                    try {
+                        const typedarray = new Uint8Array(this.result);
+                        const pdfDocument = await pdfjsLib.getDocument({ data: typedarray }).promise;
+                        let fullText = '';
+                        for (let pageNum = 1; pageNum <= pdfDocument.numPages; pageNum++) {
+                            const page = await pdfDocument.getPage(pageNum);
+                            const textContent = await page.getTextContent();
+                            fullText += textContent.items.map(item => item.str).join(' ') + '
+';
+                        }
+                        if (fullText.trim() === '') throw new Error("Il PDF sembra vuoto o è un'immagine scannerizzata senza testo.");
+                        loadingText.textContent = "Sto organizzando la scheda...";
+                        processTextWithAI(fullText);
+                    } catch (error) {
+                        console.error("Errore lettura PDF:", error);
+                        loadingOverlay.classList.add('hidden'); loadingOverlay.classList.remove('flex');
+                        showMessage(error.message || "Impossibile leggere questo PDF.", true);
+                    }
+                };
+                fileReader.onerror = () => { loadingOverlay.classList.add('hidden'); loadingOverlay.classList.remove('flex'); showMessage("Accesso al file PDF negato.", true); };
+                fileReader.readAsArrayBuffer(file);
+            } else {
+                loadingOverlay.classList.add('hidden'); loadingOverlay.classList.remove('flex');
+                showMessage("Formato non supportato (.txt o .pdf)", true);
+            }
+            fileInput.value = '';
+        });
+
+        demoBtn.onclick = () => {
+            const chaoticText = `SETTIMANA 1
+Giorno 1 (Petto)
+Panca Piana 4x10 rec 90s (scendere lenti)
+Croci 3x12 rec 60
+Giorno 2 (Gambe)
+Squat 5x5 rec 2 min
+Pressa 4x10
+SETTIMANA 2
+Giorno 1 (Forza)
+Stacchi 5x3 rec 3 min (usa cintura)`;
+            processTextWithAI(chaoticText);
+        };
+
+        resetBtn.onclick = () => {
+            stopRestTimer();
+            appContainer.classList.add('hidden'); appContainer.classList.remove('flex');
+            uploadContainer.classList.remove('hidden'); resetBtn.classList.add('hidden');
+            menuBtn.classList.add('hidden'); fileInput.value = '';
+        };
+
+        function openVideo(videoId) {
+            if (!videoId) return;
+            const isUrl = /^https?:\/\//i.test(videoId);
+            videoFrame.src = isUrl ? videoId : `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?autoplay=1`;
+            videoModal.classList.remove('hidden'); videoModal.classList.add('flex');
+        }
+        closeVideoBtn.onclick = () => { videoModal.classList.add('hidden'); videoModal.classList.remove('flex'); videoFrame.src = ''; };
+    </script>
+</body>
+</html>
